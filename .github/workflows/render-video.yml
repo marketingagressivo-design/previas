@@ -48,13 +48,14 @@ jobs:
         run: |
           for id in ${{ steps.lista.outputs.ids }}; do
             echo "=== $id ==="
+            gh release delete "render-$id" --yes --cleanup-tag 2>/dev/null || true
+            gh release create "render-$id" --prerelease --title "Render $id" --notes "PROGRESSO:0"
             if node render/render.js "render/fila/$id.json"; then
               saida=$(node -e "console.log(JSON.parse(require('fs').readFileSync('render/fila/$id.json','utf8')).saida||'saida/$id.mp4')")
-              gh release delete "render-$id" --yes --cleanup-tag 2>/dev/null || true
-              gh release create "render-$id" "$saida" --title "Render $id" --notes "Vídeo renderizado automaticamente."
+              gh release upload "render-$id" "$saida" --clobber
+              gh release edit "render-$id" --notes "PROGRESSO:100" --prerelease=false
             else
-              gh release delete "render-$id" --yes --cleanup-tag 2>/dev/null || true
-              gh release create "render-$id" --title "FALHOU $id" --notes "O render falhou. Veja a aba Actions."
+              gh release edit "render-$id" --title "FALHOU $id" --notes "O render falhou. Veja a aba Actions."
               exit 1
             fi
           done
