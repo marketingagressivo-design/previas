@@ -17,9 +17,6 @@ concurrency:
   group: render-video
   cancel-in-progress: false
 
-permissions:
-  contents: write
-
 jobs:
   render:
     runs-on: ubuntu-latest
