@@ -1,0 +1,60 @@
+name: Render de vídeo
+
+# Dispara sozinho quando a extensão sobe um pedido novo: render/fila/<id>.json (o .html do mesmo id sobe ANTES).
+on:
+  push:
+    paths: ['render/fila/*.json']
+  workflow_dispatch:
+    inputs:
+      pedido:
+        description: 'id do pedido (nome do .json em render/fila, sem .json)'
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: render-video
+  cancel-in-progress: false
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 2 }
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - name: Descobre os pedidos novos
+        id: lista
+        run: |
+          if [ -n "${{ github.event.inputs.pedido }}" ]; then
+            echo "ids=${{ github.event.inputs.pedido }}" >> "$GITHUB_OUTPUT"
+          else
+            ids=$(git diff --name-only --diff-filter=AM HEAD~1 HEAD -- 'render/fila/*.json' | xargs -r -n1 basename | sed 's/\.json$//' | tr '\n' ' ')
+            echo "ids=$ids" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Instala as ferramentas
+        if: steps.lista.outputs.ids != ''
+        run: |
+          sudo apt-get update -y && sudo apt-get install -y ffmpeg
+          npm install
+          npx playwright install --with-deps chromium
+      - name: Renderiza e publica
+        if: steps.lista.outputs.ids != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for id in ${{ steps.lista.outputs.ids }}; do
+            echo "=== $id ==="
+            if node render/render.js "render/fila/$id.json"; then
+              saida=$(node -e "console.log(JSON.parse(require('fs').readFileSync('render/fila/$id.json','utf8')).saida||'saida/$id.mp4')")
+              gh release delete "render-$id" --yes --cleanup-tag 2>/dev/null || true
+              gh release create "render-$id" "$saida" --title "Render $id" --notes "Vídeo renderizado automaticamente."
+            else
+              gh release delete "render-$id" --yes --cleanup-tag 2>/dev/null || true
+              gh release create "render-$id" --title "FALHOU $id" --notes "O render falhou. Veja a aba Actions."
+              exit 1
+            fi
+          done
