@@ -31,7 +31,7 @@ const fs = require('fs'), path = require('path');
   const ff = spawn('ffmpeg', args, { stdio: ['pipe', 'inherit', 'inherit'] });
   const t0 = Date.now();
   for (let i = 0; i < N; i++) {
-    const d = await page.evaluate(t => { window.renderAt(t); return document.getElementById('cv').toDataURL('image/jpeg', 0.95).slice(23); }, i / FPS);
+    const d = await page.evaluate(t => { window.renderAt(t); return (document.getElementById('cv') || document.querySelector('canvas')).toDataURL('image/jpeg', 0.95).slice(23); }, i / FPS);
     if (!ff.stdin.write(Buffer.from(d, 'base64'))) await new Promise(r => ff.stdin.once('drain', r));
     if (i % 150 === 0) console.log('quadro', i, '/', N, Math.round((Date.now() - t0) / 1000) + 's');
   }
