@@ -34,6 +34,7 @@ const fs = require('fs'), path = require('path');
     const d = await page.evaluate(t => { window.renderAt(t); return (document.getElementById('cv') || document.querySelector('canvas')).toDataURL('image/jpeg', 0.95).slice(23); }, i / FPS);
     if (!ff.stdin.write(Buffer.from(d, 'base64'))) await new Promise(r => ff.stdin.once('drain', r));
     if (i % 150 === 0) console.log('quadro', i, '/', N, Math.round((Date.now() - t0) / 1000) + 's');
+    if (process.env.GH_TOKEN && Date.now() - (global.__ult || 0) > 6000) { global.__ult = Date.now(); try { require('child_process').spawnSync('gh', ['release', 'edit', 'render-' + path.basename(cfgPath, '.json'), '--notes', 'PROGRESSO:' + Math.floor(i / N * 100)], { stdio: 'ignore', timeout: 20000 }); } catch (x) {} }
   }
   ff.stdin.end(); const cod = await new Promise(r => ff.on('close', r));
   await browser.close(); if (audio && audio.includes('_audio')) fs.unlinkSync(audio);
