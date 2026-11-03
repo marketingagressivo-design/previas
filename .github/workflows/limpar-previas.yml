@@ -1,0 +1,83 @@
+name: Limpar previas antigas
+
+on:
+  schedule:
+    - cron: '7 * * * *'
+  workflow_dispatch:
+    inputs:
+      teste:
+        description: 'Modo teste (so lista, nao apaga)'
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: limpar-previas
+  cancel-in-progress: false
+
+jobs:
+  limpar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Limpar
+        env:
+          TESTE: ${{ github.event_name == 'workflow_dispatch' && inputs.teste || 'false' }}
+        run: |
+          python3 - << 'PY'
+          import os, re, time, shutil
+          teste = os.environ.get('TESTE') == 'true'
+          limite = 24 * 3600
+          agora = time.time()
+          raiz = 'p'
+          apagar, manter = [], []
+          if os.path.isdir(raiz):
+              for nome in sorted(os.listdir(raiz)):
+                  pasta = os.path.join(raiz, nome)
+                  idx = os.path.join(pasta, 'index.html')
+                  if not os.path.isdir(pasta) or not os.path.isfile(idx):
+                      manter.append((pasta, 'sem index.html')); continue
+                  with open(idx, encoding='utf-8', errors='ignore') as f:
+                      topo = f.read(6000)
+                  m = re.search(r'<meta\s+name=["\']abertura-previa["\']\s+content=["\'](\d+)["\']', topo)
+                  if not m:
+                      manter.append((pasta, 'sem a marca abertura-previa')); continue
+                  v = int(m.group(1))
+                  criado = v / 1000.0 if v > 10**11 else float(v)
+                  idade = agora - criado
+                  if idade < 0:
+                      manter.append((pasta, 'data no futuro')); continue
+                  if idade > limite:
+                      apagar.append((pasta, idade))
+                  else:
+                      manter.append((pasta, 'tem %.1f h' % (idade / 3600)))
+          linhas = ['## Limpeza de previas (%s)' % ('TESTE, nada foi apagado' if teste else 'VALENDO'), '']
+          for p, motivo in manter:
+              linhas.append('MANTER %s/ (%s)' % (p, motivo))
+          for p, idade in apagar:
+              linhas.append('APAGAR %s/ (%.1f h)' % (p, idade / 3600))
+              if not teste:
+                  shutil.rmtree(p)
+          linhas.append('')
+          linhas.append('Total a apagar: %d' % len(apagar))
+          texto = '\n'.join(linhas)
+          print(texto)
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as f:
+              f.write(texto + '\n')
+          PY
+
+      - name: Enviar apagados
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.teste) }}
+        run: |
+          git config user.name "limpeza-previas"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Nada para apagar."
+          else
+            git commit -m "limpeza: apaga previas com mais de 24 h"
+            git push
+          fi
