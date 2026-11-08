@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow">
+<title>Caos e Poder · painel da montagem</title>
+<style>
+:root{--f:#0b0e11;--c:#14181c;--l:#252c33;--t:#e8edf0;--fr:#8a96a0;--v:#21c7a8;--r:#e0353f;--a:#f2b33d}
+*{box-sizing:border-box}body{margin:0;background:var(--f);color:var(--t);font:14px/1.45 system-ui,'Segoe UI',Roboto,sans-serif}
+main{max-width:1000px;margin:0 auto;padding:18px}h1{font:800 18px system-ui;letter-spacing:1px;margin:0 0 4px}small,.fr{color:var(--fr)}
+.card{background:var(--c);border:1px solid var(--l);border-radius:14px;padding:14px;margin:12px 0}
+video{width:100%;border-radius:10px;background:#000;aspect-ratio:16/9}
+.lin{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px}
+button{border:0;border-radius:9px;padding:9px 13px;font:700 13px system-ui;cursor:pointer;background:#252c33;color:var(--t)}
+button.pri{background:linear-gradient(135deg,#c8102e,#2a46b8);color:#fff}button:disabled{opacity:.45;cursor:default}
+ol,ul{margin:6px 0 0 18px;padding:0}li{margin:2px 0}.ok{color:var(--v)}.ruim{color:var(--r)}.and{color:var(--a)}
+#msg{min-height:20px;margin-top:8px}code{background:#1a1f24;padding:1px 5px;border-radius:5px}
+</style></head><body><main>
+<h1>CAOS E PODER · PAINEL DA MONTAGEM</h1>
+<small id="ver">conectando à extensão…</small>
+
+<div class="card">
+  <b>🎬 PRÉVIA</b> <small id="previaInfo">montada pelo Claude com os seus arquivos (áudio, takes, VTs, locuções, cobertura)</small>
+  <video id="vid" controls preload="metadata"></video>
+  <div class="lin">
+    <button class="pri" data-a="aprovarPrevia">✅ APROVAR PRÉVIA → GERAR NO HEYGEN</button>
+    <button data-a="refazerPrevia">↻ MONTAR DE NOVO</button>
+    <button data-a="tentar">↻ TENTAR DE NOVO</button>
+    <button data-a="gerarLocucoes">🎙 GERAR LOCUÇÕES</button>
+    <button data-a="enviar">🛰 ENVIAR TUDO AO GITHUB</button>
+  </div>
+  <div id="msg"></div>
+</div>
+
+<div class="card"><b>📋 ONDE ESTÁ</b><div id="etapa" class="fr">—</div><ol id="etapas"></ol></div>
+<div class="card"><b>✂ TAKES DE CÂMERA (vão ao HeyGen, um por vez)</b><ol id="takes"></ol></div>
+<div class="card"><b>🎞 NOTÍCIAS</b><ol id="nots"></ol><div id="lote" class="fr"></div></div>
+<div class="card"><b>⚠ ÚLTIMOS ERROS</b><ul id="erros"></ul></div>
+<div class="card fr" id="semExt" hidden>Este painel fala com a extensão <b>Abertura CRM</b> instalada neste Chrome. Abra esta página no Chrome do PC do Caos e Poder.
+  Se a extensão estiver lá e mesmo assim não conectar, cole o ID dela aqui: <input id="extIn" size="36"> <button id="extOk">usar</button></div>
+</main>
+<script>
+const EXT_PADRAO = '';   // o Claude preenche quando a extensão mandar o ID pelo espelho
+const $ = s => document.querySelector(s), esc = t => String(t ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+let EXT = ''; try { EXT = localStorage.getItem('cpExt') || ''; } catch (e) {} EXT = EXT || EXT_PADRAO;
+const mm = s => Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0');
+function pedir(msg) { return new Promise(ok => { try { if (!(window.chrome && chrome.runtime && chrome.runtime.sendMessage) || !EXT) return ok({ ok: false, erro: 'sem extensão' }); chrome.runtime.sendMessage(EXT, msg, r => { const e = chrome.runtime.lastError; ok(e ? { ok: false, erro: e.message } : (r || { ok: false, erro: 'sem resposta' })); }); } catch (x) { ok({ ok: false, erro: String(x) }); } }); }
+const ICO = { concluida: '✓', erro: '✗', pendente: '○', 'em andamento': '⏳', aguardando: '⏸' };
+async function atualizar() {
+  const r = await pedir({ acao: 'estado' });
+  $('#semExt').hidden = !!r.ok; if (!r.ok) { $('#ver').textContent = '✗ extensão não conectada (' + r.erro + ')'; return; }
+  $('#ver').textContent = 'extensão v' + r.versao + ' · atualizado ' + new Date().toLocaleTimeString('pt-BR');
+  const j = r.hgJob || {}, h = j.etapas || [];
+  $('#etapa').innerHTML = h[j.atual] ? '<b>' + esc(h[j.atual].nome) + '</b> — ' + esc(h[j.atual].status) + (j.erro ? ' · <span class="ruim">' + esc(j.erro) + '</span>' : '') + (j.planoMsg ? ' · ⏳ ' + esc(j.planoMsg) : '') : '—';
+  $('#etapas').innerHTML = h.map(e => '<li class="' + (e.status === 'erro' ? 'ruim' : e.status === 'concluida' ? 'ok' : e.status === 'em andamento' ? 'and' : '') + '">' + (ICO[e.status] || '○') + ' ' + esc(e.nome) + '</li>').join('');
+  const pl = j.plano && j.plano.segs ? j.plano : (j.planoPrevia || null);
+  $('#takes').innerHTML = pl ? pl.segs.map((x, i) => '<li>' + mm(x.ini) + ' · ' + (x.fim - x.ini).toFixed(1) + ' s · ' + esc(x.status || '') + ' · “' + esc(x.frase) + '”</li>').join('') : '<li class="fr">ainda sem plano</li>';
+  $('#nots').innerHTML = (r.noticias || []).map(n => '<li><b>' + esc(n.manchete) + '</b><br><small>fala em vídeo: ' + esc(n.trecho || '—') + ' · print: ' + esc(n.print || '—') + ' · locução: ' + esc(n.loc || '—') + (n.locErro ? ' (' + esc(n.locErro) + ')' : '') + ' · cobertura: ' + esc(n.cobertura || '—') + (n.zoom ? ' (com zoom)' : '') + '</small></li>').join('');
+  $('#lote').textContent = r.lote ? '🎙 locuções: ' + (r.lote.status || '') + ' · ' + (r.lote.feitos || 0) + ' de ' + (r.lote.n || 0) + (r.lote.msg ? ' · ' + r.lote.msg : '') : '';
+  $('#erros').innerHTML = (r.erros || []).slice().reverse().map(e => '<li><small>' + esc(e.em.slice(11, 19)) + ' · ' + esc(e.onde) + '</small><br>' + esc(String(e.t).slice(0, 300)) + '</li>').join('') || '<li class="ok">nenhum</li>';
+  const aguarda = h[1] && h[1].status === 'aguardando' && j.previaFoto && !(j.plano && j.plano.previaOk);
+  document.querySelector('[data-a=aprovarPrevia]').disabled = !aguarda;
+}
+document.querySelectorAll('button[data-a]').forEach(b => b.onclick = async () => {
+  const a = b.dataset.a; if (a === 'aprovarPrevia' && !confirm('Aprovar a prévia e mandar os takes ao HeyGen (gasta créditos)?')) return;
+  $('#msg').textContent = '⏳ ' + b.textContent + '…'; const r = await pedir({ acao: a }); $('#msg').innerHTML = r && r.ok !== false ? '<span class="ok">✓ feito</span>' : '<span class="ruim">✗ ' + esc((r && r.erro) || 'falhou') + '</span>'; atualizar();
+});
+$('#extOk').onclick = () => { EXT = $('#extIn').value.trim(); try { localStorage.setItem('cpExt', EXT); } catch (e) {} atualizar(); };
+$('#vid').src = 'previa.mp4?v=' + Date.now(); $('#vid').onerror = () => { $('#previaInfo').textContent = 'a prévia montada pelo Claude ainda não subiu'; };
+atualizar(); setInterval(atualizar, 5000);
+</script></body></html>
